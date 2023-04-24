@@ -6,7 +6,7 @@ import { TranslateService } from '@ngx-translate/core';
 import { UUID } from 'angular2-uuid';
 import { environment } from 'environments/environment';
 import {
-  BehaviorSubject, EMPTY, interval, Observable, of, switchMap, tap, timer,
+  BehaviorSubject, EMPTY, interval, Observable, of, Subscription, switchMap, tap, timer,
 } from 'rxjs';
 import { webSocket, WebSocketSubject } from 'rxjs/webSocket';
 import { IncomingApiMessageType, OutgoingApiMessageType } from 'app/enums/api-message-type.enum';
@@ -22,6 +22,10 @@ export class WebsocketConnectionService {
   private ws$: WebSocketSubject<unknown>;
 
   private readonly pingTimeoutMillis = 20 * 1000;
+  private pingSubscription: Subscription;
+
+  private websocketSubscription: Subscription;
+
   private readonly reconnectTimeoutMillis = 5 * 1000;
   private pendingCallsBeforeConnectionReady = new Map<string, unknown>();
 
@@ -71,7 +75,10 @@ export class WebsocketConnectionService {
       }),
     );
     // At least one explicit subscription required to keep the connection open
-    this.ws$.pipe(
+    if (this.websocketSubscription) {
+      this.websocketSubscription.unsubscribe();
+    }
+    this.websocketSubscription = this.ws$.pipe(
       tap((response: IncomingWebsocketMessage) => {
         if (response.msg === IncomingApiMessageType.Connected) {
           this.isConnectionReady$.next(true);
@@ -140,7 +147,10 @@ export class WebsocketConnectionService {
   }
 
   private setupPing(): void {
-    interval(this.pingTimeoutMillis).pipe(untilDestroyed(this)).subscribe({
+    if (this.pingSubscription) {
+      this.pingSubscription.unsubscribe();
+    }
+    this.pingSubscription = interval(this.pingTimeoutMillis).pipe(untilDestroyed(this)).subscribe({
       next: () => {
         this.ws$.next({ msg: OutgoingApiMessageType.Ping, id: UUID.UUID() });
       },
